@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import pandas as pd
 import numpy as np
 from scipy.optimize import root_scalar
@@ -16,11 +17,11 @@ def fourier_interpolation2(x, y, f):
         fx = fourier_interpolation(f[:, j], x)
         f_at_x.append(fx)
     f_at_x = np.array(f_at_x).T
-
+    
     # interpolate to y
     f_at_xy = []
     for i in range(x.size):
-        fxy = fourier_interpolation(f[i, :], [y[i]])
+        fxy = fourier_interpolation(f_at_x[i, :], [y[i]])
         f_at_xy.append(fxy)
     f_at_xy = np.array(f_at_xy).flatten()
     return f_at_xy
@@ -46,7 +47,6 @@ def reparametrizeBoozer(axis, field=None, ppp=10):
     xc = chebfun(x, [0, 1])
     yc = chebfun(y, [0, 1])
     zc = chebfun(z, [0, 1])
-    
     
     xpc = xc.diff()
     ypc = yc.diff()
@@ -94,24 +94,25 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
     XYZ  = np.array([s.gamma() for s in surfaces])
     XYZ_axis = np.stack([axis.gamma() for _ in range(S.shape[1])], axis=1)
     XYZ = np.concatenate((XYZ_axis[None, ...], XYZ), axis=0)
-
+    
+    k = min([3, XYZ.shape[0]-1])
 
     # evaluate covariate basis functions at points on surface with label s
     s_XYZ = np.zeros(XYZ.shape[1:])
     for i in range(s_XYZ.shape[0]):
         for j in range(s_XYZ.shape[1]):
-            s_XYZ[i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2)(s)
-            s_XYZ[i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2)(s)
-            s_XYZ[i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2)(s)
+            s_XYZ[i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2, k=k)(s)
+            s_XYZ[i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2, k=k)(s)
+            s_XYZ[i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2, k=k)(s)
 
 
     # evaluate covariate basis functions at points on surface with label s
     s_dXYZ_dS = np.zeros(XYZ.shape[1:])
     for i in range(s_dXYZ_dS.shape[0]):
         for j in range(s_dXYZ_dS.shape[1]):
-            s_dXYZ_dS[i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2).derivative()(s)
-            s_dXYZ_dS[i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2).derivative()(s)
-            s_dXYZ_dS[i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2).derivative()(s)
+            s_dXYZ_dS[i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2, k=k).derivative()(s)
+            s_dXYZ_dS[i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2, k=k).derivative()(s)
+            s_dXYZ_dS[i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2, k=k).derivative()(s)
 
     dXYZ_dVARPHI  = np.array([s.gammadash1() for s in surfaces])
     dXYZ_axis_dVARPHI = np.stack([axis.gammadash() for _ in range(S.shape[1])], axis=1)
@@ -119,9 +120,9 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
     s_dXYZ_dVARPHI = np.zeros(XYZ.shape[1:])
     for i in range(s_dXYZ_dVARPHI.shape[0]):
         for j in range(s_dXYZ_dVARPHI.shape[1]):
-            s_dXYZ_dVARPHI[i, j, 0] = InterpolatedUnivariateSpline(tf, dXYZ_dVARPHI[:, i, j, 0], ext=2)(s)
-            s_dXYZ_dVARPHI[i, j, 1] = InterpolatedUnivariateSpline(tf, dXYZ_dVARPHI[:, i, j, 1], ext=2)(s)
-            s_dXYZ_dVARPHI[i, j, 2] = InterpolatedUnivariateSpline(tf, dXYZ_dVARPHI[:, i, j, 2], ext=2)(s)
+            s_dXYZ_dVARPHI[i, j, 0] = InterpolatedUnivariateSpline(tf, dXYZ_dVARPHI[:, i, j, 0], ext=2, k=k)(s)
+            s_dXYZ_dVARPHI[i, j, 1] = InterpolatedUnivariateSpline(tf, dXYZ_dVARPHI[:, i, j, 1], ext=2, k=k)(s)
+            s_dXYZ_dVARPHI[i, j, 2] = InterpolatedUnivariateSpline(tf, dXYZ_dVARPHI[:, i, j, 2], ext=2, k=k)(s)
 
     dXYZ_dTHETA  = np.array([s.gammadash2() for s in surfaces])
     dXYZ_axis_dTHETA = np.stack([np.zeros(axis.gamma().shape) for _ in range(S.shape[1])], axis=1)
@@ -130,9 +131,9 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
     s_dXYZ_dTHETA = np.zeros(XYZ.shape[1:])
     for i in range(s_dXYZ_dTHETA.shape[0]):
         for j in range(s_dXYZ_dTHETA.shape[1]):
-            s_dXYZ_dTHETA[i, j, 0] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 0], ext=2)(s)
-            s_dXYZ_dTHETA[i, j, 1] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 1], ext=2)(s)
-            s_dXYZ_dTHETA[i, j, 2] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 2], ext=2)(s)
+            s_dXYZ_dTHETA[i, j, 0] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 0], ext=2, k=k)(s)
+            s_dXYZ_dTHETA[i, j, 1] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 1], ext=2, k=k)(s)
+            s_dXYZ_dTHETA[i, j, 2] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 2], ext=2, k=k)(s)
     
     J = np.sum(s_dXYZ_dS * np.cross(s_dXYZ_dVARPHI, s_dXYZ_dTHETA), axis=-1)
     gradS      = np.cross(s_dXYZ_dVARPHI, s_dXYZ_dTHETA)/J[:, :, None]
@@ -147,7 +148,7 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
     gradTHETA_dot_gradTHETA = np.sum(gradTHETA*gradTHETA, axis=-1)
     modB = BiotSavart(coils).set_points(s_XYZ.reshape((-1, 3))).AbsB().reshape(s_XYZ.shape[:-1])
 
-    iota = InterpolatedUnivariateSpline(tf, iotas, ext=2)(s)
+    iota = InterpolatedUnivariateSpline(tf, iotas, ext=2, k=k)(s)
     varphi = np.linspace(0, length, npoints)
     theta = alpha+iota*varphi
     
@@ -160,7 +161,8 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
     modB_on_fl = fourier_interpolation2(varphi, theta, modB)
     J_on_fl = fourier_interpolation2(varphi, theta, J)
     
-    out_dict = {'gradS_dot_gradTHETA':gradS_dot_gradTHETA_on_fl, \
+    out_dict = {'varphi':varphi, \
+                'gradS_dot_gradTHETA':gradS_dot_gradTHETA_on_fl, \
                 'gradS_dot_gradVARPHI':gradS_dot_gradVARPHI_on_fl, \
                 'gradTHETA_dot_graVARPHI':gradTHETA_dot_gradVARPHI_on_fl, \
                 'gradS_dot_gradS':gradS_dot_gradS_on_fl,\
@@ -171,8 +173,12 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
 
 
 iID = 0
-df = pd.read_pickle('files/QUASR_full.pkl')
-[surfaces, axis, coils] = load(f'.json')
+df = pd.read_pickle('QUASR_full.pkl')
+ID = df.iloc[iID].ID
+fID = ID // 1000
+#import subprocess;subprocess.run(["scp", f"agiuliani@popeye:/mnt/home/agiuliani/ceph/parameter_scan/QUASR_26032024/simsopt_serials/{fID:04}/serial{ID:07}.json", "./"])
+
+[surfaces, axis, coils] = load(f'serial{ID:07}.json')
 
 # reparametrize the axis in boozer toroidal varphi
 axis_uniform = reparametrizeBoozer(axis, field=BiotSavart(coils))
@@ -194,4 +200,19 @@ for s in surfaces_fp:
 
 iota_profile = df.iloc[iID].iota_profile
 tf_profile = df.iloc[iID].tf_profile
-out = output_to_gx(axis, surfaces_ft, iota_profile, tf_profile, s=1.)
+out = output_to_gx(axis, surfaces_ft, iota_profile, tf_profile, s=1e-1, npoints=256)
+variables = [k for k in out.keys() if k != 'varphi']
+
+import matplotlib.pyplot as plt
+plt.figure(figsize=(12, 8))
+nrows = 4
+ncols = 2
+for j, variable in enumerate(variables):
+    plt.subplot(nrows, ncols, j + 1)
+    plt.plot(out['varphi'], out[variable])
+    plt.xlabel('Standard toroidal angle $\phi$')
+    plt.title(variable)
+
+#plt.figtext(0.5, 0.995, f'surface s={surface}, field line alpha={alpha} from file {vmec_output_file}', ha='center', va='top')
+plt.tight_layout()
+plt.show()
