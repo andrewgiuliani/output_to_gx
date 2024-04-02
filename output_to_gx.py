@@ -112,6 +112,9 @@ def reparametrizeBoozer(axis, field=None, ppp=10):
     return axis_uniform
 
 def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
+    r"""
+    Compute nsurfaces magnetic surfaces in the magnetic field given by BiotSavart(coils).
+    """
     tf_outer = ToroidalFlux(surfaces[-1], BiotSavart(coils)).J()
     tf_targets = np.linspace(0, 1, nsurfaces+1)[1:]**2
 
@@ -146,19 +149,64 @@ def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
     return new_surface_list, np.array(new_iota_profile), np.array(new_tf_profile)
 
 
-def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=51, length=10*np.pi, nsurfaces=None, filename=None):
+def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024, length=10*np.pi, nsurfaces=None, filename=None):
+    r"""
+    Compute geometric quantities useful for gyrokinetic simulations alone field lines.  This function takes as input
+    a magnetic axis, a number of surfaces, as well as the rotational transform and torodial flux associated to the axis 
+    and surfaces. It is assumed that the input surfaces are parametrized in Boozer coordinates and are instances of 
+    `SurfaceXYZTensorFourier` and that the input magnetic axis is an instance of `CurveRZFourier`.
+
+    The first step of the algorithm is the reparametrize the toroidal angle on the magnetic axis from toroidal :math:`\phi` to
+    Boozer :math:`\varphi`.  This is done using pycheb, the Python version of the chebfun package.
+
+    Next, the algorithm uses spline interpolation radially, and Fourier interpolation toroidally to construct the geometric quantities
+    sampled on field lines.
+    
+    The geometric quantities computed by this function are :math:`\nabla s \cdot \nabla s`, :math:`\nabla \varphi \cdot \nabla \varphi`, 
+    :math:`\nabla \theta \cdot \nabla \theta`, :math:`\nabla s \cdot \nabla \varphi`, :math:`\nabla \s \cdot \nabla \theta`, 
+    :math:`\nabla \theta \cdot \nabla \varphi`, and :math:`\|\mathbf B\|`, and Boozer coordiantes Jacobian. 
+
+    The value of ``s`` provided as input must lie between 0 and 1, and corresponds to the normalized toroidal flux on which
+    the geometric quantities are calculated.
+    
+    The angles varphi, theta are assumed to be in radians and are not normalized by 2pi as is done in SurfaceXYZTensorFourier.
+
+    Args:
+        axis: magnetic axis of the input magnetic field as a CurveRZFourier
+        surfaces: list of magnetic surfaces parametrized in Boozer coordinates as SurfaceXYZTensorFourier
+        iotas: list of rotational transforms on the axis and surfaces
+        tf: list of toroidal fluxes through the axis and surfaces, though the toroidal flux through the axis is necessarily 0.
+        field: magnetic field in which the axis and surfaces lie, e.g., it could be a BiotSavart(coils) field.
+        s: the normalized toroidal flux on which the geometric quantities are to be computed.
+        alpha: the label of the field line on which these quantities are computed, alpha = theta - iota*varphi
+        npoints: number of points on the field line where geometric quantities are sampled
+        length: toroidal length of the field line where geometric quantities are sampled.
+        nsurfaces: either 'None' or some integer > 0.  If `None', then the number of surfaces used to represent the magnetic field is the same as len(surfaces).
+                   If some nonzero integer, then `nsurfaces` surfaces are computed in `field`, uniformly spaced in minor radius.
+        filename: either `None' or a string.  If a string is provided, then a png file is saved to disk to visualize the geometric quantities and a
+                  vtk file is output the visualize some of the geometric quantities in paraview.
+    Returns:
+        out_dict: a dictionary containing geometric quantities sampled on fieldlines when the dictionary key ends with `on_fl` and on the surface with label `s` 
+                  when the dictionary key ends with `on_s`.
+    """
+
+    assert type(axis) == CurveRZFourier
+    assert np.all([type(s) == SurfaceXYZTensorFourier for s in surfaces])
+    assert (s >= 0) and (s<=1.)
+    assert nsurfaces is None or nsurfaces > 0
+
     if nsurfaces is not None:
-        surfaces, iotas, tf = compute_surfaces(surfaces, field, tf, iotas, nsurfaces=5)
+        surfaces, iotas, tf = compute_surfaces(surfaces, field, tf, iotas, nsurfaces=nsurfaces)
 
     sdim1_max = np.max([s.quadpoints_phi.size for s in surfaces])
     sdim2_max = np.max([s.quadpoints_theta.size for s in surfaces])
-
+    
     # reparametrize the axis in boozer toroidal varphi
     axis_uniform = reparametrizeBoozer(axis, field=field)
     quadpoints_varphi = np.linspace(0, 1, sdim1_max*surfaces[0].nfp, endpoint=False)
     axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
     axis.x = axis_uniform.x
-    
+
     # put surface on entire torus
     surfaces_fp = surfaces
     surfaces_ft = []
@@ -196,7 +244,6 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=51, l
                 dXYZ_dS[m, i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2, k=k).derivative()(S[m, i, j])
                 dXYZ_dS[m, i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2, k=k).derivative()(S[m, i, j])
                 dXYZ_dS[m, i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2, k=k).derivative()(S[m, i, j])
-
 
     # evaluate covariate basis functions at points on surface with label s
     s_dXYZ_dS = np.zeros(XYZ.shape[1:])
