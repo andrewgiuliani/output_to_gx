@@ -1,0 +1,3 @@
+[submodule "chebpy"]
+	path = chebpy
+	url = https://github.com/chebpy/chebpy
