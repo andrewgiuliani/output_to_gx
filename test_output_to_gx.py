@@ -21,7 +21,7 @@ class BoozerSurfaceTests(unittest.TestCase):
         tf_profile2 = np.array([0.0, 0.024422725969058666, 0.09635207405078684, 0.21208882681079555, 0.3663510986586298, 0.5531342185832635, 0.7665243506879468, 1.0])
 
         for (ID, iota, tf) in zip([ID1, ID2], [iota_profile1, iota_profile2], [tf_profile1, tf_profile2]):
-            [surfaces, axis, coils] = load(f'serial{ID:07}.json')
+            [surfaces, axis, coils] = load(f'files/serial{ID:07}.json')
             self.subtest_volume_values(axis, surfaces, coils, tf, iota)
             self.subtest_varphi(ID, iota, axis, surfaces, BiotSavart(coils))
             self.subtest_compute_quantities(axis, surfaces, iota, tf, BiotSavart(coils))
