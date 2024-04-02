@@ -48,6 +48,9 @@ def is_self_intersecting(surface, angle=0.):
 
 
 def reparametrizeBoozer(axis, field=None, ppp=10):
+    ## This function reparametetrizes a magnetic axis to have uniform weighted
+    #  incremental arclength
+    
     def x(t):
         ind = np.array(t)
         out = np.zeros((ind.size,3))
@@ -146,16 +149,15 @@ def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
 def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=51, length=10*np.pi, nsurfaces=None, filename=None):
     if nsurfaces is not None:
         surfaces, iotas, tf = compute_surfaces(surfaces, field, tf, iotas, nsurfaces=5)
-    
-    # reparametrize the axis in boozer toroidal varphi
-    axis_uniform = reparametrizeBoozer(axis, field=field)
-    quadpoints_varphi = np.linspace(0, 1, surfaces[0].quadpoints_phi.size*surfaces[0].nfp, endpoint=False)
-    axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
-    axis.x = axis_uniform.x
-    
-     
+
     sdim1_max = np.max([s.quadpoints_phi.size for s in surfaces])
     sdim2_max = np.max([s.quadpoints_theta.size for s in surfaces])
+
+    # reparametrize the axis in boozer toroidal varphi
+    axis_uniform = reparametrizeBoozer(axis, field=field)
+    quadpoints_varphi = np.linspace(0, 1, sdim1_max*surfaces[0].nfp, endpoint=False)
+    axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
+    axis.x = axis_uniform.x
     
     # put surface on entire torus
     surfaces_fp = surfaces
