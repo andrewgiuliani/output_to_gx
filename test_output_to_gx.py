@@ -51,7 +51,7 @@ class BoozerSurfaceTests(unittest.TestCase):
             err_prev = err
 
     def subtest_compute_quantities(self, axis, surfaces, iotas, tf, field):
-        out = output_to_gx(axis, surfaces, iotas, tf, field, s=0.123, npoints=512, filename='out')
+        out = output_to_gx(axis, surfaces, iotas, tf, field, s=0.5, npoints=512, filename='out')
 
     def subtest_volume_values(self, axis, surfaces, coils, tf_profile, iota_profile):
         current_sum = np.sum([np.abs(c.current.get_value()) for c in coils])

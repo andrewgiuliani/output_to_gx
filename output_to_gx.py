@@ -242,7 +242,7 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=51, l
     out_dict = {'varphi_on_fl':varphi, 'theta_on_fl':theta,\
                 'gradS_dot_gradTHETA_on_fl':gradS_dot_gradTHETA_on_fl, \
                 'gradS_dot_gradVARPHI_on_fl':gradS_dot_gradVARPHI_on_fl, \
-                'gradTHETA_dot_graVARPHI_on_fl':gradTHETA_dot_gradVARPHI_on_fl, \
+                'gradTHETA_dot_gradVARPHI_on_fl':gradTHETA_dot_gradVARPHI_on_fl, \
                 'gradS_dot_gradS_on_fl':gradS_dot_gradS_on_fl,\
                 'gradVARPHI_dot_gradVARPHI_on_fl':gradVARPHI_dot_gradVARPHI_on_fl,\
                 'gradTHETA_dot_gradTHETA_on_fl':gradTHETA_dot_gradTHETA_on_fl,\
@@ -262,22 +262,21 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=51, l
     if filename is not None:
         pointdata = {'S':S, 'VARPHI':VARPHI, 'THETA': THETA, 'gradS': tuple([dXYZ_dS[..., i].copy() for i in range(3)]), 'gradVARPHI': tuple([dXYZ_dVARPHI[..., i].copy() for i in range(3)]), 'gradTHETA': tuple([dXYZ_dTHETA[..., i].copy() for i in range(3)])}
         gridToVTK(filename, XYZ[..., 0].copy(), XYZ[..., 1].copy(), XYZ[..., 2].copy(), pointData=pointdata)
- 
+
+        variables = [k for k in out_dict.keys() if k != 'varphi_on_fl' and k !='theta_on_fl' and k[-1] != 's']
+        
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(12, 8))
+        nrows = 4
+        ncols = 2
+        for j, variable in enumerate(variables):
+            plt.subplot(nrows, ncols, j + 1)
+            plt.plot(out_dict['varphi_on_fl'], out_dict[variable])
+            plt.xlabel(r'Boozer toroidal angle $\varphi$')
+            plt.title(variable)
+        plt.tight_layout()
+        plt.savefig(filename+'.png')
     return out_dict
 
 #
-#variables = [k for k in out.keys() if k != 'varphi_on_fl' and k !='theta_on_fl' and k[-1] != 's']
-#
-#import matplotlib.pyplot as plt
-#plt.figure(figsize=(12, 8))
-#nrows = 4
-#ncols = 2
-#for j, variable in enumerate(variables):
-#    plt.subplot(nrows, ncols, j + 1)
-#    plt.plot(out['varphi_on_fl'], out[variable])
-#    plt.xlabel('Standard toroidal angle $\phi$')
-#    plt.title(variable)
-#
-##plt.figtext(0.5, 0.995, f'surface s={surface}, field line alpha={alpha} from file {vmec_output_file}', ha='center', va='top')
-#plt.tight_layout()
-#plt.show()
+
