@@ -111,7 +111,7 @@ def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
                 quadpoints_phi=phis, quadpoints_theta=thetas,\
                 stellsym=surfaces[idx].stellsym, nfp=surfaces[idx].nfp)
         surface.x = surfaces[idx].x
-
+        
         boozer_surface = BoozerSurface(BiotSavart(coils), surface,  ToroidalFlux(surface, BiotSavart(coils)), tf_target*tf_outer)
         res = boozer_surface.solve_residual_equation_exactly_newton(tol=1e-13, maxiter=20, iota=iota_profile[idx], G=G0)
         if not res['success']:
@@ -125,26 +125,60 @@ def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
             new_surface_list.append(surface)
             new_iota_profile.append(res['iota'])
             new_tf_profile.append(tf_target)
-    return new_surface_list, new_iota_profile, new_tf_profile
+    return new_surface_list, np.array(new_iota_profile), np.array(new_tf_profile)
 
 
-def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=10*np.pi, filename='out'):
+def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=51, length=10*np.pi, nsurfaces=None, filename=None):
+    if nsurfaces is not None:
+        surfaces, iotas, tf = compute_surfaces(surfaces, field, tf, iotas, nsurfaces=5)
+    
+    # reparametrize the axis in boozer toroidal varphi
+    axis_uniform = reparametrizeBoozer(axis, field=field)
+    quadpoints_varphi = np.linspace(0, 1, surfaces[0].quadpoints_phi.size*surfaces[0].nfp, endpoint=False)
+    axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
+    axis.x = axis_uniform.x
+    
+     
+    sdim1_max = np.max([s.quadpoints_phi.size for s in surfaces])
+    sdim2_max = np.max([s.quadpoints_theta.size for s in surfaces])
+    
+    # put surface on entire torus
+    surfaces_fp = surfaces
+    surfaces_ft = []
+    for stemp in surfaces_fp:
+        snew = SurfaceXYZTensorFourier(quadpoints_phi=np.linspace(0, 1, sdim1_max*stemp.nfp, endpoint=False),\
+                                       quadpoints_theta=np.linspace(0, 1, sdim2_max*stemp.nfp, endpoint=False),\
+                                       nfp=stemp.nfp,\
+                                       stellsym=stemp.stellsym,\
+                                       mpol=stemp.mpol, ntor=stemp.ntor)
+        snew.x = stemp.x
+        surfaces_ft.append(snew)
+    surfaces = surfaces_ft
+
     S, VARPHI, THETA = np.meshgrid(tf, surfaces[0].quadpoints_phi, surfaces[0].quadpoints_theta, indexing='ij')
     XYZ  = np.array([s.gamma() for s in surfaces])
     XYZ_axis = np.stack([axis.gamma() for _ in range(S.shape[1])], axis=1)
     XYZ = np.concatenate((XYZ_axis[None, ...], XYZ), axis=0)
-    gridToVTK(str(filename), XYZ[..., 0].copy(), XYZ[..., 1].copy(), XYZ[..., 2].copy())
     
-
     k = min([3, XYZ.shape[0]-1])
-
-    # evaluate covariate basis functions at points on surface with label s
+    
+    # evaluate what the surface coordinates on label s 
     s_XYZ = np.zeros(XYZ.shape[1:])
     for i in range(s_XYZ.shape[0]):
         for j in range(s_XYZ.shape[1]):
             s_XYZ[i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2, k=k)(s)
             s_XYZ[i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2, k=k)(s)
             s_XYZ[i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2, k=k)(s)
+
+
+    # evaluate covariate basis functions at points on surface with label s
+    dXYZ_dS = np.zeros(XYZ.shape)
+    for m in range(dXYZ_dS.shape[0]):
+        for i in range(dXYZ_dS.shape[1]):
+            for j in range(dXYZ_dS.shape[2]):
+                dXYZ_dS[m, i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2, k=k).derivative()(S[m, i, j])
+                dXYZ_dS[m, i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2, k=k).derivative()(S[m, i, j])
+                dXYZ_dS[m, i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2, k=k).derivative()(S[m, i, j])
 
 
     # evaluate covariate basis functions at points on surface with label s
@@ -157,7 +191,9 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
 
     dXYZ_dVARPHI  = np.array([s.gammadash1() for s in surfaces])
     dXYZ_axis_dVARPHI = np.stack([axis.gammadash() for _ in range(S.shape[1])], axis=1)
-    dXYZ_dVARPHI = np.concatenate((dXYZ_axis_dVARPHI[None, ...], dXYZ_dVARPHI), axis=0)
+    
+    # divide by 2pi since the varphi angle varies from 0 to 1 in SurfaceXYZTensorFourier
+    dXYZ_dVARPHI = np.concatenate((dXYZ_axis_dVARPHI[None, ...], dXYZ_dVARPHI), axis=0)/(2*np.pi)
     s_dXYZ_dVARPHI = np.zeros(XYZ.shape[1:])
     for i in range(s_dXYZ_dVARPHI.shape[0]):
         for j in range(s_dXYZ_dVARPHI.shape[1]):
@@ -167,8 +203,9 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
 
     dXYZ_dTHETA  = np.array([s.gammadash2() for s in surfaces])
     dXYZ_axis_dTHETA = np.stack([np.zeros(axis.gamma().shape) for _ in range(S.shape[1])], axis=1)
-    dXYZ_dTHETA = np.concatenate((dXYZ_axis_dTHETA[None, ...], dXYZ_dTHETA), axis=0)
-
+    
+    # divide by 2pi since the theta angle varies from 0 to 1 in SurfaceXYZTensorFourier
+    dXYZ_dTHETA = np.concatenate((dXYZ_axis_dTHETA[None, ...], dXYZ_dTHETA), axis=0)/(2*np.pi)
     s_dXYZ_dTHETA = np.zeros(XYZ.shape[1:])
     for i in range(s_dXYZ_dTHETA.shape[0]):
         for j in range(s_dXYZ_dTHETA.shape[1]):
@@ -187,7 +224,7 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
     gradS_dot_gradS = np.sum(gradS*gradS, axis=-1)
     gradVARPHI_dot_gradVARPHI = np.sum(gradVARPHI*gradVARPHI, axis=-1)
     gradTHETA_dot_gradTHETA = np.sum(gradTHETA*gradTHETA, axis=-1)
-    modB = BiotSavart(coils).set_points(s_XYZ.reshape((-1, 3))).AbsB().reshape(s_XYZ.shape[:-1])
+    modB = field.set_points(s_XYZ.reshape((-1, 3))).AbsB().reshape(s_XYZ.shape[:-1])
 
     iota = InterpolatedUnivariateSpline(tf, iotas, ext=2, k=k)(s)
     varphi = np.linspace(0, length, npoints)
@@ -210,6 +247,10 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
                 'gradVARPHI_dot_gradVARPHI_on_fl':gradVARPHI_dot_gradVARPHI_on_fl,\
                 'gradTHETA_dot_gradTHETA_on_fl':gradTHETA_dot_gradTHETA_on_fl,\
                 'modB_on_fl':modB_on_fl, 'J_on_fl':J_on_fl,\
+                'XYZ_on_s':s_XYZ, \
+                'dXYZ_dS_on_s':s_dXYZ_dS, \
+                'dXYZ_dVARPHI_on_s':s_dXYZ_dVARPHI, \
+                'dXYZ_dTHETA_on_s': s_dXYZ_dTHETA, \
                 'gradS_dot_gradTHETA_on_s':gradS_dot_gradTHETA, \
                 'gradS_dot_gradVARPHI_on_s':gradS_dot_gradVARPHI, \
                 'gradTHETA_dot_gradVARPHI_on_s':gradTHETA_dot_gradVARPHI, \
@@ -217,94 +258,26 @@ def output_to_gx(axis, surfaces, iotas, tf, s=0.1, alpha=0, npoints=51, length=1
                 'gradVARPHI_dot_gradVARPHI_on_s':gradVARPHI_dot_gradVARPHI,\
                 'gradTHETA_dot_gradTHETA_s':gradTHETA_dot_gradTHETA,\
                 'modB_on_s':modB, 'J_on_s':J}
+
+    if filename is not None:
+        pointdata = {'S':S, 'VARPHI':VARPHI, 'THETA': THETA, 'gradS': tuple([dXYZ_dS[..., i].copy() for i in range(3)]), 'gradVARPHI': tuple([dXYZ_dVARPHI[..., i].copy() for i in range(3)]), 'gradTHETA': tuple([dXYZ_dTHETA[..., i].copy() for i in range(3)])}
+        gridToVTK(filename, XYZ[..., 0].copy(), XYZ[..., 1].copy(), XYZ[..., 2].copy(), pointData=pointdata)
+ 
     return out_dict
 
-
-#iID = 251778
-iID = 0
-df = pd.read_pickle('QUASR_full.pkl')
-ID = df.iloc[iID].ID
-fID = ID // 1000
-#import subprocess;subprocess.run(["scp", f"agiuliani@popeye:/mnt/home/agiuliani/ceph/parameter_scan/QUASR_26032024/simsopt_serials/{fID:04}/serial{ID:07}.json", "./"])
-iota_profile = df.iloc[iID].iota_profile
-tf_profile = df.iloc[iID].tf_profile
-
-[surfaces, axis, coils] = load(f'serial{ID:07}.json')
-surfaces, iota_profile, tf_profile = compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10)
-
-# reparametrize the axis in boozer toroidal varphi
-#axis_uniform = reparametrizeBoozer(axis, field=None)
-axis_uniform = reparametrizeBoozer(axis, field=BiotSavart(coils))
-quadpoints_varphi = np.linspace(0, 1, surfaces[0].quadpoints_phi.size*surfaces[0].nfp, endpoint=False)
-axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
-axis.x = axis_uniform.x
-
-
-sdim1_max = np.max([s.quadpoints_phi.size for s in surfaces])
-sdim2_max = np.max([s.quadpoints_theta.size for s in surfaces])
-
-# put surface on entire torus
-surfaces_fp = surfaces
-surfaces_ft = []
-for s in surfaces_fp:
-    snew = SurfaceXYZTensorFourier(quadpoints_phi=np.linspace(0, 1, sdim1_max*s.nfp, endpoint=False),\
-                                   quadpoints_theta=np.linspace(0, 1, sdim2_max*s.nfp, endpoint=False),\
-                                   nfp=s.nfp,\
-                                   stellsym=s.stellsym,\
-                                   mpol=s.mpol, ntor=s.ntor)
-    snew.x = s.x
-    surfaces_ft.append(snew)
-
-
-
-
-# CHECK THAT WE ARE CONVERGING TO THE CORRECT VARPHI ANGLES
-#import ipdb;ipdb.set_trace()
-#from simsopt.geo import BoozerSurface, Volume
-#s0=surfaces[0]
-#iota = iota_profile[0]
-#current_sum = np.sum([np.abs(c.current.get_value()) for c in coils])
-#G0 = 2. * np.pi * current_sum * (4 * np.pi * 10**(-7) / (2 * np.pi))
-#err_prev = np.inf
-#for i in range(10):
-#    boozer_surface = BoozerSurface(BiotSavart(coils), s0,  Volume(s0), s0.volume()/4)
-#    res = boozer_surface.solve_residual_equation_exactly_newton(tol=1e-13, maxiter=20, iota=iota, G=G0)
-#    snew = SurfaceXYZTensorFourier(quadpoints_phi=np.linspace(0, 1, s0.quadpoints_phi.size*s.nfp, endpoint=False),\
-#                                   quadpoints_theta=np.linspace(0, 1, s0.quadpoints_theta.size*s.nfp, endpoint=False),\
-#                                   nfp=s0.nfp,\
-#                                   stellsym=s0.stellsym,\
-#                                   mpol=s0.mpol, ntor=s0.ntor)
-#    snew.x = s0.x
-#    err = np.mean(np.linalg.norm(snew.gamma() - axis.gamma()[:, None, :], axis=-1))
-#    print(err, err/err_prev, s0.minor_radius())
-#    err_prev = err
-#import ipdb;ipdb.set_trace()
-
-
-# CHECK THAT WE ARE CONVERGING TO THE CORRECT VOLUME
-
-
-
-
-
-
-
-
-
-
-out = output_to_gx(axis, surfaces_ft, iota_profile, tf_profile, s=1e-1, npoints=512)
-variables = [k for k in out.keys() if k != 'varphi_on_fl' and k !='theta_on_fl' and k[-1] != 's']
-
-import matplotlib.pyplot as plt
-plt.figure(figsize=(12, 8))
-nrows = 4
-ncols = 2
-for j, variable in enumerate(variables):
-    plt.subplot(nrows, ncols, j + 1)
-    plt.plot(out['varphi_on_fl'], out[variable])
-    plt.xlabel('Standard toroidal angle $\phi$')
-    plt.title(variable)
-
-#plt.figtext(0.5, 0.995, f'surface s={surface}, field line alpha={alpha} from file {vmec_output_file}', ha='center', va='top')
-plt.tight_layout()
-plt.show()
+#
+#variables = [k for k in out.keys() if k != 'varphi_on_fl' and k !='theta_on_fl' and k[-1] != 's']
+#
+#import matplotlib.pyplot as plt
+#plt.figure(figsize=(12, 8))
+#nrows = 4
+#ncols = 2
+#for j, variable in enumerate(variables):
+#    plt.subplot(nrows, ncols, j + 1)
+#    plt.plot(out['varphi_on_fl'], out[variable])
+#    plt.xlabel('Standard toroidal angle $\phi$')
+#    plt.title(variable)
+#
+##plt.figtext(0.5, 0.995, f'surface s={surface}, field line alpha={alpha} from file {vmec_output_file}', ha='center', va='top')
+#plt.tight_layout()
+#plt.show()
