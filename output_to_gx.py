@@ -20,6 +20,21 @@ try:
 except ImportError:
     contour_self_intersects = None
 
+def fourier_interpolation2(fk, x, y):
+    # interpolate to x
+    f_at_x = []
+    for j in range(fk.shape[1]):
+        fx = fourier_interpolation(fk[:, j], x)
+        f_at_x.append(fx)
+    f_at_x = np.array(f_at_x).T
+
+    # interpolate to y
+    f_at_xy = []
+    for i in range(x.size):
+        fxy = fourier_interpolation(f_at_x[i, :], [y[i]])
+        f_at_xy.append(fxy)
+    f_at_xy = np.array(f_at_xy).flatten()
+    return f_at_xy
 
 def is_self_intersecting(surface, angle=0.):
     cs = surface.cross_section(angle)
@@ -230,14 +245,14 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=51, l
     varphi = np.linspace(0, length, npoints)
     theta = alpha+iota*varphi
     
-    gradS_dot_gradTHETA_on_fl = fourier_interpolation(gradS_dot_gradTHETA, varphi, y=theta)
-    gradS_dot_gradVARPHI_on_fl = fourier_interpolation(gradS_dot_gradVARPHI, varphi, y=theta)
-    gradTHETA_dot_gradVARPHI_on_fl = fourier_interpolation(gradTHETA_dot_gradVARPHI, varphi, y=theta)
-    gradS_dot_gradS_on_fl = fourier_interpolation(gradS_dot_gradS, varphi, y=theta)
-    gradVARPHI_dot_gradVARPHI_on_fl = fourier_interpolation(gradVARPHI_dot_gradVARPHI, varphi, y=theta)
-    gradTHETA_dot_gradTHETA_on_fl = fourier_interpolation(gradTHETA_dot_gradTHETA, varphi, y=theta)
-    modB_on_fl = fourier_interpolation(modB, varphi, y=theta)
-    J_on_fl = fourier_interpolation(J, varphi, y=theta)
+    gradS_dot_gradTHETA_on_fl = fourier_interpolation2(gradS_dot_gradTHETA, varphi, theta)
+    gradS_dot_gradVARPHI_on_fl = fourier_interpolation2(gradS_dot_gradVARPHI, varphi, theta)
+    gradTHETA_dot_gradVARPHI_on_fl = fourier_interpolation2(gradTHETA_dot_gradVARPHI, varphi, theta)
+    gradS_dot_gradS_on_fl = fourier_interpolation2(gradS_dot_gradS, varphi, theta)
+    gradVARPHI_dot_gradVARPHI_on_fl = fourier_interpolation2(gradVARPHI_dot_gradVARPHI, varphi, theta)
+    gradTHETA_dot_gradTHETA_on_fl = fourier_interpolation2(gradTHETA_dot_gradTHETA, varphi, theta)
+    modB_on_fl = fourier_interpolation2(modB, varphi, theta)
+    J_on_fl = fourier_interpolation2(J, varphi, theta)
     
     out_dict = {'varphi_on_fl':varphi, 'theta_on_fl':theta,\
                 'gradS_dot_gradTHETA_on_fl':gradS_dot_gradTHETA_on_fl, \
