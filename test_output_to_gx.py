@@ -83,7 +83,7 @@ class OutputToGXTests(unittest.TestCase):
         surface.x = surfaces[idx].x
         
         boozer_surface = BoozerSurface(BiotSavart(coils), surface,  ToroidalFlux(surface, BiotSavart(coils)), tf_target*tf_outer)
-        res = boozer_surface.solve_residual_equation_exactly_newton(tol=1e-13, maxiter=20, iota=iota_profile[idx], G=G0)
+        res = boozer_surface.solve_residual_equation_exactly_newton(tol=1e-13, maxiter=20, iota=iota_profile[idx+1], G=G0)
         
         phis = np.linspace(0, 1, surfaces[idx].nfp*(2*surfaces[idx].mpol+1), endpoint=False)
         thetas = np.linspace(0, 1, surfaces[idx].nfp*(2*surfaces[idx].ntor+1), endpoint=False)
@@ -93,7 +93,9 @@ class OutputToGXTests(unittest.TestCase):
         surface.x = boozer_surface.surface.x
         
         for nsurfaces in [5, 10, 15]:
-            tmp_surfaces, tmp_iota_profile, tmp_tf_profile = compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=nsurfaces)
+            tmp_surfaces, tmp_iota_profile, tmp_tf_profile = compute_surfaces(surfaces, coils, tf_profile[1:], iota_profile[1:], nsurfaces=nsurfaces)
+            tmp_iota_profile = np.concatenate(([iota_profile[0]], tmp_iota_profile))
+            tmp_tf_profile = np.concatenate(([0.], tmp_tf_profile))
             out = output_to_gx(axis, tmp_surfaces, tmp_iota_profile, tmp_tf_profile, BiotSavart(coils), s=0.123, npoints=512, filename='out')
             err1 = np.mean(np.linalg.norm(surface.gamma()-out['XYZ_on_s'], axis=-1))
             err2 = np.mean(np.linalg.norm(surface.gammadash1()/(2.*np.pi)-out['dXYZ_dVARPHI_on_s'], axis=-1))

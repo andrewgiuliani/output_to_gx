@@ -166,6 +166,7 @@ def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
         new iota_profile: array of the rotational transforms of the surfaces in `new_surface_list`.
         new_tf_profile: array of toroidal fluxes through the surfaces in `new_surface_list`.
     """
+
     tf_outer = ToroidalFlux(surfaces[-1], BiotSavart(coils)).J()
     tf_targets = np.linspace(0, 1, nsurfaces+1)[1:]**2
     
@@ -176,7 +177,7 @@ def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
     new_tf_profile = []
     new_surface_list = []
     for tf_target in tf_targets:
-        idx = np.argmin(np.abs(tf_profile[1:]-tf_target))
+        idx = np.argmin(np.abs(tf_profile-tf_target))
         phis = np.linspace(0, 1/surfaces[idx].nfp, 2*surfaces[idx].mpol+1, endpoint=False)
         thetas = np.linspace(0, 1, 2*surfaces[idx].ntor+1, endpoint=False)
         surface = SurfaceXYZTensorFourier(mpol=surfaces[idx].mpol, ntor=surfaces[idx].ntor, \
@@ -221,6 +222,8 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     the geometric quantities are calculated.
     
     The angles varphi, theta are assumed to be in radians and are not normalized by 2pi as is done in SurfaceXYZTensorFourier.
+    
+    NOTE: if large enough islands exist in `field`, then the computed geometric data likely cannot be trusted.
 
     Args:
         axis: magnetic axis of the input magnetic field as a CurveRZFourier
@@ -238,7 +241,8 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
                   vtk file is output the visualize some of the geometric quantities in paraview.
     Returns:
         out_dict: a dictionary containing geometric quantities sampled on fieldlines when the dictionary key ends with `on_fl` and on the surface with label `s` 
-                  when the dictionary key ends with `on_s`.
+                  when the dictionary key ends with `on_s`.  Quantities samples along a field line are stored as a 1D array with `npoints` entries uniformly spaced
+                  in the Boozer toroidal angle.  Quantities sampled on a surface are stored as a 2D array, uniformly spaced in Boozer angles on the full torus.
     """
 
     assert type(axis) == CurveRZFourier
@@ -247,7 +251,7 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     assert nsurfaces is None or nsurfaces > 0
 
     if nsurfaces is not None:
-        new_surfaces, new_iotas, new_tf = compute_surfaces(surfaces, field, tf, iotas, nsurfaces=nsurfaces)
+        new_surfaces, new_iotas, new_tf = compute_surfaces(surfaces, field, tf[1:], iotas[1:], nsurfaces=nsurfaces)
         surfaces = new_surfaces
         iotas = np.concatenate(([iotas[0]], new_iotas))
         tf = np.concatenate(([0.], new_tf))
