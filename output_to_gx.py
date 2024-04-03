@@ -21,6 +21,21 @@ except ImportError:
     contour_self_intersects = None
 
 def fourier_interpolation2(fk, x, y):
+    r"""
+    This function interpolates a periodic 2D function using a Fourier interpolant. Using 1D Fourier interpolation
+    already implemented in SIMSOPT, the 2D fourier interpolant is evaluated at the coordinates defined in `x` and `y`.
+
+    Note: `x` and `y` are assumed to be in radians, i.e., not normalized to [0, 1) as is sometimes assumed in SIMSOPT.
+
+    Args:
+        fk: the function values used to define the Fourier interpolant.  This is a 2D array.
+        x: x-coordinates where we want to evaluate the Fourier interpolant. This is a 1D array.
+        y: y-coordinates where we want to evaluate the Fourier interpolant. This is a 1D array.
+
+    Returns:
+        f_at_xy: the value of the Fourier interpolant at the coordinates defined in `x` and `y`.
+    """
+
     # interpolate to x
     f_at_x = []
     for j in range(fk.shape[1]):
@@ -37,6 +52,21 @@ def fourier_interpolation2(fk, x, y):
     return f_at_xy
 
 def is_self_intersecting(surface, angle=0.):
+    r"""
+    This function checks whether the input surface is self-intersecting.  This check is done by
+    computing a cross-section of the input surface at the standard cylindrical angle `angle`.  Then,
+    this function checks whether the cross-section (approximated as a piecewise linear spline) self-intersects
+    using the Bentley-Ottmann algorithm.  Note that this function may falsely return that the surface is not
+    self-intersecting, even though it is at a different cylindrical angle `angle`.  It is recommended that this
+    function is run at multiple cylindrical angles to be certain that the surface is not self-intersecting everywhere.
+
+    Args:
+        surface: the surface that we want to check is self-intersecting or not.
+        angle:  the standard cylindrical angle at which the function checks the surface's cross section
+                is self-intersecting.
+    Returns:
+        True if the surface self-intersects at the standard cylindrical angle `angle`, False otherwise.
+    """
     cs = surface.cross_section(angle)
     R = np.sqrt(cs[:, 0]**2 + cs[:, 1]**2)
     Z = cs[:, 2]
@@ -48,9 +78,22 @@ def is_self_intersecting(surface, angle=0.):
 
 
 def reparametrizeBoozer(axis, field=None, ppp=10):
-    ## This function reparametetrizes a magnetic axis to have uniform weighted
-    #  incremental arclength
+    r"""
+    This function reparametetrizes the input magnetic axis to have uniform weighted incremental arclength.
+
+    Args:
+        axis: the input magnetic axis that is an instance of CurveRZFourier
+        field: the magnetic field used to weight the incremental arclength.  If `None`, then the function
+               uses a weight of 1., i.e., the resulting curve will have uniform incrememental arclength.
+        ppp:  the number of points per period used to define the new reparametrized curve.  A number greater than 10
+              is recommended.
+    Returns:
+       axis_uniform: a new CurveXYZFourier that is a reparametrization of the input `axis` with uniform (weighted) incremental
+                    arclength.
+    """
     
+    assert type(axis) == CurveRZFourier
+
     def x(t):
         ind = np.array(t)
         out = np.zeros((ind.size,3))
@@ -78,8 +121,6 @@ def reparametrizeBoozer(axis, field=None, ppp=10):
     
     # Find nodes that are equispaced in arc length
     speed = np.sqrt(xpc*xpc + ypc*ypc + zpc*zpc)
-    #G0 = (B*speed).sum()
-    #arclength_B0_over_G0 = (speed*B/G0).cumsum()/(speed*B/G0).sum()
     if field is not None:
         def modB(t):
             ind = np.array(t)
@@ -92,8 +133,6 @@ def reparametrizeBoozer(axis, field=None, ppp=10):
         arclength = (speed*B).cumsum()/(speed*B).sum()
     else:
         arclength = speed.cumsum()/speed.sum()
-
-
     
     npts = ppp*axis.order*axis.nfp
     if npts % 2 == 0:
@@ -113,17 +152,29 @@ def reparametrizeBoozer(axis, field=None, ppp=10):
 
 def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
     r"""
-    Compute nsurfaces magnetic surfaces in the magnetic field given by BiotSavart(coils).
+    Compute nsurfaces magnetic surfaces, that are uniformly spaced in minor radius, in the magnetic field given by BiotSavart(coils).
+
+    Args:
+        surfaces: list of surfaces that are known to lie in the field BiotSavart(coils).
+        coils: electromagnetic coils that generate a magnetic field in which we aim to compute surfaces
+        tf_profile: the toroidal fluxes associated to the input surfaces
+        iota_profile: rotational transform associated to the input surfaces
+        nsurfaces: the number of surfaces that we aim to compute in the input magnetic field given by BiotSavart(coils).
+    
+    Returns:
+        new_surface_list: list of computed magnetic surfaces that uniformly spaced in minor radius.
+        new iota_profile: array of the rotational transforms of the surfaces in `new_surface_list`.
+        new_tf_profile: array of toroidal fluxes through the surfaces in `new_surface_list`.
     """
     tf_outer = ToroidalFlux(surfaces[-1], BiotSavart(coils)).J()
     tf_targets = np.linspace(0, 1, nsurfaces+1)[1:]**2
-
+    
     current_sum = np.sum([np.abs(c.current.get_value()) for c in coils])
     G0 = 2. * np.pi * current_sum * (4 * np.pi * 10**(-7) / (2 * np.pi))
     
-    new_iota_profile = [iota_profile[0]]
+    new_iota_profile = []
+    new_tf_profile = []
     new_surface_list = []
-    new_tf_profile = [0.]
     for tf_target in tf_targets:
         idx = np.argmin(np.abs(tf_profile[1:]-tf_target))
         phis = np.linspace(0, 1/surfaces[idx].nfp, 2*surfaces[idx].mpol+1, endpoint=False)
@@ -196,7 +247,10 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     assert nsurfaces is None or nsurfaces > 0
 
     if nsurfaces is not None:
-        surfaces, iotas, tf = compute_surfaces(surfaces, field, tf, iotas, nsurfaces=nsurfaces)
+        new_surfaces, new_iotas, new_tf = compute_surfaces(surfaces, field, tf, iotas, nsurfaces=nsurfaces)
+        surfaces = new_surfaces
+        iotas = np.concatenate(([iotas[0]], new_iotas))
+        tf = np.concatenate(([0.], new_tf))
 
     sdim1_max = np.max([s.quadpoints_phi.size for s in surfaces])
     sdim2_max = np.max([s.quadpoints_theta.size for s in surfaces])

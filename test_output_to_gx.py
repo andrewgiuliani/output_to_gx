@@ -9,7 +9,6 @@ from simsopt.geo import CurveRZFourier, CurveXYZFourier, ToroidalFlux, SurfaceXY
 from simsopt.field import BiotSavart
 
 class BoozerSurfaceTests(unittest.TestCase):
-
     def test_devices(self):
         
         ID1 = 887713
