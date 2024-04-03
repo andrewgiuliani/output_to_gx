@@ -186,18 +186,27 @@ def compute_surfaces(surfaces, coils, tf_profile, iota_profile, nsurfaces=10):
         surface.x = surfaces[idx].x
         
         boozer_surface = BoozerSurface(BiotSavart(coils), surface,  ToroidalFlux(surface, BiotSavart(coils)), tf_target*tf_outer)
-        res = boozer_surface.solve_residual_equation_exactly_newton(tol=1e-13, maxiter=20, iota=iota_profile[idx], G=G0)
+        try:
+            res = boozer_surface.solve_residual_equation_exactly_newton(tol=1e-13, maxiter=20, iota=iota_profile[idx], G=G0)
+        except:
+            res = {'success': False}
+
         if not res['success']:
             surface.x = surfaces[idx].x
             boozer_surface.need_to_run_code=True
-            res = boozer_surface.minimize_boozer_penalty_constraints_LBFGS(tol=1e-9, maxiter=500, constraint_weight=100., iota=iota_profile[idx], G=G0)
-        
+            
+            try:
+                res = boozer_surface.minimize_boozer_penalty_constraints_LBFGS(tol=1e-9, maxiter=500, constraint_weight=100., iota=iota_profile[idx], G=G0)
+            except:
+               continue
+
         is_inter = np.any([is_self_intersecting(surface, a) for a in np.linspace(0, 2*np.pi/surface.nfp, 10)])
         print(res['success'])
         if res['success'] and not is_inter:
             new_surface_list.append(surface)
             new_iota_profile.append(res['iota'])
             new_tf_profile.append(tf_target)
+    
     return new_surface_list, np.array(new_iota_profile), np.array(new_tf_profile)
 
 
