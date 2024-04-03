@@ -207,12 +207,12 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     a magnetic axis, a number of surfaces, as well as the rotational transform and torodial flux associated to the axis 
     and surfaces. It is assumed that the input surfaces are parametrized in Boozer coordinates and are instances of 
     `SurfaceXYZTensorFourier` and that the input magnetic axis is an instance of `CurveRZFourier`.
-
+    
     The first step of the algorithm is the reparametrize the toroidal angle on the magnetic axis from toroidal :math:`\phi` to
     Boozer :math:`\varphi`.  This is done using pycheb, the Python version of the chebfun package.
 
-    Next, the algorithm uses spline interpolation radially, and Fourier interpolation toroidally to construct the geometric quantities
-    sampled on field lines.
+    Next, the algorithm uses spline interpolation radially outward from the magnetic axis, and Fourier interpolation toroidally to 
+    construct the geometric quantities sampled on field lines.
     
     The geometric quantities computed by this function are :math:`\nabla s \cdot \nabla s`, :math:`\nabla \varphi \cdot \nabla \varphi`, 
     :math:`\nabla \theta \cdot \nabla \theta`, :math:`\nabla s \cdot \nabla \varphi`, :math:`\nabla \s \cdot \nabla \theta`, 
