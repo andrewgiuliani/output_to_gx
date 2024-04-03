@@ -2,7 +2,7 @@
 This is a utility to compute geometric quantities of devices in QUASR for gyrokinetic simulations.  To install:
 
     git clone --recursive
-    cd pycheb/
+    cd chebpy/
     pip install -e .
     cd ..
     
