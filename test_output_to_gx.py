@@ -8,9 +8,13 @@ from simsopt.geo import BoozerSurface, Volume
 from simsopt.geo import CurveRZFourier, CurveXYZFourier, ToroidalFlux, SurfaceXYZTensorFourier
 from simsopt.field import BiotSavart
 
-class BoozerSurfaceTests(unittest.TestCase):
+class OutputToGXTests(unittest.TestCase):
     def test_devices(self):
-        
+        r"""
+        This wrapper test runs a number of subtests on a few devices from QUASR.  The subtests complete a couple of convergence tests, and runs
+        checks that the output_to_gx function runs without error.
+        """
+
         ID1 = 887713
         iota_profile1 = np.array([0.5007765829001171, 0.5004388941281233, 0.4995670761840123])
         tf_profile1 = np.array([0.0, 0.251052309282534, 1.0])
@@ -26,6 +30,11 @@ class BoozerSurfaceTests(unittest.TestCase):
             self.subtest_compute_quantities(axis, surfaces, iota, tf, BiotSavart(coils))
 
     def subtest_varphi(self, ID, iota_profile, axis, surfaces, field):
+        r"""
+        This unit test checks that as the surface minor radius approaches 0, the Boozer toroidal angle (varphi) on the surface, approaches
+        the toroidal angle on the magnetic axis.  Since the magnetic axis is reparametrized in Boozer coordinates, i.e., is uniformly spaced
+        in weighted incremental arclength, when the minor radius is halved, the error |axis(varphi)-surface(varphi, theta)| is halved.
+        """
         axis_uniform = reparametrizeBoozer(axis, field=field)
         quadpoints_varphi = np.linspace(0, 1, surfaces[0].quadpoints_phi.size*surfaces[0].nfp, endpoint=False)
         axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
@@ -50,9 +59,17 @@ class BoozerSurfaceTests(unittest.TestCase):
             err_prev = err
 
     def subtest_compute_quantities(self, axis, surfaces, iotas, tf, field):
+        r"""
+        This unit test checks that the output_to_gx function runs without error.
+        """
         out = output_to_gx(axis, surfaces, iotas, tf, field, s=0.5, npoints=512, filename='out')
 
     def subtest_volume_values(self, axis, surfaces, coils, tf_profile, iota_profile):
+        r"""
+        This unit test checks that the radial interpolation works as expected, i.e., increasing the number of surfaces
+        used to represent the magnetic field reduces the error in XYZ, dXYZ_dVARPHI, and dXYZ_dTHETA.
+        """
+
         current_sum = np.sum([np.abs(c.current.get_value()) for c in coils])
         G0 = 2. * np.pi * current_sum * (4 * np.pi * 10**(-7) / (2 * np.pi))
         tf_outer = ToroidalFlux(surfaces[-1], BiotSavart(coils)).J()
