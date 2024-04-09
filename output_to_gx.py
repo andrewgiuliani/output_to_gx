@@ -77,13 +77,13 @@ def is_self_intersecting(surface, angle=0.):
     return contour_self_intersects(contour)
 
 
-def reparametrizeBoozer(axis, field=None, ppp=10):
+def reparametrize(axis, weighting=None, ppp=10):
     r"""
     This function reparametetrizes the input magnetic axis to have uniform weighted incremental arclength.
 
     Args:
         axis: the input magnetic axis that is an instance of CurveRZFourier
-        field: the magnetic field used to weight the incremental arclength.  If `None`, then the function
+        weighting: the weighting function applied to the incremental arclength.  If `None`, then the function
                uses a weight of 1., i.e., the resulting curve will have uniform incrememental arclength.
         ppp:  the number of points per period used to define the new reparametrized curve.  A number greater than 10
               is recommended.
@@ -121,16 +121,9 @@ def reparametrizeBoozer(axis, field=None, ppp=10):
     
     # Find nodes that are equispaced in arc length
     speed = np.sqrt(xpc*xpc + ypc*ypc + zpc*zpc)
-    if field is not None:
-        def modB(t):
-            ind = np.array(t)
-            out = np.zeros((ind.size,3))
-            axis.gamma_impl(out, ind)
-            field.set_points(out)
-            absB = field.AbsB()
-            return absB
-        B  = chebfun(modB, [0, 1])
-        arclength = (speed*B).cumsum()/(speed*B).sum()
+    if weighting is not None:
+        w  = chebfun(weighting, [0, 1])
+        arclength = (speed*w).cumsum()/(speed*w).sum()
     else:
         arclength = speed.cumsum()/speed.sum()
     
@@ -268,8 +261,16 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     sdim1_max = np.max([s.quadpoints_phi.size for s in surfaces])
     sdim2_max = np.max([s.quadpoints_theta.size for s in surfaces])
     
+    def modB(t):
+        ind = np.array(t)
+        out = np.zeros((ind.size,3))
+        axis.gamma_impl(out, ind)
+        field.set_points(out)
+        absB = field.AbsB()
+        return absB
+
     # reparametrize the axis in boozer toroidal varphi
-    axis_uniform = reparametrizeBoozer(axis, field=field)
+    axis_uniform = reparametrize(axis, weighting=modB)
     quadpoints_varphi = np.linspace(0, 1, sdim1_max*surfaces[0].nfp, endpoint=False)
     axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
     axis.x = axis_uniform.x

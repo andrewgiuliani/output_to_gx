@@ -2,7 +2,7 @@
 import unittest
 import pandas as pd
 import numpy as np
-from output_to_gx import reparametrizeBoozer, output_to_gx, compute_surfaces
+from output_to_gx import reparametrize, output_to_gx, compute_surfaces
 from simsopt._core import load
 from simsopt.geo import BoozerSurface, Volume
 from simsopt.geo import CurveRZFourier, CurveXYZFourier, ToroidalFlux, SurfaceXYZTensorFourier
@@ -25,6 +25,11 @@ class OutputToGXTests(unittest.TestCase):
 
         for (ID, iota, tf) in zip([ID1, ID2], [iota_profile1, iota_profile2], [tf_profile1, tf_profile2]):
             [surfaces, axis, coils] = load(f'files/serial{ID:07}.json')
+            #sRZ = surfaces[-1].to_RZFourier()
+            #sRZ.write_nml(f'files/input.{ID:07}')
+            #print(sRZ.mpol, sRZ.ntor, sRZ.quadpoints_phi, sRZ.quadpoints_theta)
+            #continue
+
             self.subtest_volume_values(axis, surfaces, coils, tf, iota)
             self.subtest_varphi(ID, iota, axis, surfaces, BiotSavart(coils))
             self.subtest_compute_quantities(axis, surfaces, iota, tf, BiotSavart(coils))
@@ -35,7 +40,14 @@ class OutputToGXTests(unittest.TestCase):
         the toroidal angle on the magnetic axis.  Since the magnetic axis is reparametrized in Boozer coordinates, i.e., is uniformly spaced
         in weighted incremental arclength, when the minor radius is halved, the error |axis(varphi)-surface(varphi, theta)| is halved.
         """
-        axis_uniform = reparametrizeBoozer(axis, field=field)
+        def modB(t):
+            ind = np.array(t)
+            out = np.zeros((ind.size,3))
+            axis.gamma_impl(out, ind)
+            field.set_points(out)
+            absB = field.AbsB()
+            return absB
+        axis_uniform = reparametrize(axis, weighting=modB)
         quadpoints_varphi = np.linspace(0, 1, surfaces[0].quadpoints_phi.size*surfaces[0].nfp, endpoint=False)
         axis = CurveXYZFourier(quadpoints_varphi, axis_uniform.order)
         axis.x = axis_uniform.x
