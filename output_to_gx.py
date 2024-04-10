@@ -437,7 +437,7 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
         plt.figure(figsize=(12, 8))
         nrows = 4
         ncols = 2
-        plot_variables = ['modB_on_fl', 'gradpar_on_fl', ]
+        plot_variables = ['modB_on_fl', 'gradpar_on_fl', 'gradALPHA_dot_B_cross_gradB_on_fl', 'gradALPHA_dot_B_cross_gradB_on_fl', 'gradS_dot_B_cross_gradB_on_fl', 'gradALPHA_dot_gradALPHA_on_fl', 'gradS_dot_gradALPHA_on_fl', 'gradS_dot_gradS_on_fl']
         for j, variable in enumerate(plot_variables):
             plt.subplot(nrows, ncols, j + 1)
             plt.plot(out_dict['varphi_on_fl'], out_dict[variable])
