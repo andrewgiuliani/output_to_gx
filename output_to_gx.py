@@ -297,13 +297,15 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     
     # evaluate what the surface coordinates on label s 
     s_XYZ = np.zeros(XYZ.shape[1:])
+    s_VARPHI = np.zeros(VARPHI.shape[1:])
     for i in range(s_XYZ.shape[0]):
         for j in range(s_XYZ.shape[1]):
             s_XYZ[i, j, 0] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 0], ext=2, k=k)(s)
             s_XYZ[i, j, 1] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 1], ext=2, k=k)(s)
             s_XYZ[i, j, 2] = InterpolatedUnivariateSpline(tf, XYZ[:, i, j, 2], ext=2, k=k)(s)
-
-
+            # varphi coordinates on flux surface
+            s_VARPHI[i,j] = InterpolatedUnivariateSpline(tf, VARPHI[:,i,j], ext=2, k=k)(s)
+    
     # evaluate covariate basis functions at points on surface with label s
     dXYZ_dS = np.zeros(XYZ.shape)
     for m in range(dXYZ_dS.shape[0]):
@@ -344,12 +346,26 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
             s_dXYZ_dTHETA[i, j, 0] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 0], ext=2, k=k)(s)
             s_dXYZ_dTHETA[i, j, 1] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 1], ext=2, k=k)(s)
             s_dXYZ_dTHETA[i, j, 2] = InterpolatedUnivariateSpline(tf, dXYZ_dTHETA[:, i, j, 2], ext=2, k=k)(s)
+
+
+    iota = InterpolatedUnivariateSpline(tf, iotas, ext=2, k=k)(s)
+    varphi = np.linspace(0, length, npoints)
+    theta = alpha+iota*varphi
+    
+    if k > 0:
+        dds_iota = InterpolatedUnivariateSpline(tf, iotas, ext=2, k=k).derivative(n=1)(s)
+    else:
+        dds_iota = 0.0
+    shat = -2 * s * dds_iota/iota
+
     
     # using the dual relations, determine the contravariant basis functions
     J = np.sum(s_dXYZ_dS * np.cross(s_dXYZ_dVARPHI, s_dXYZ_dTHETA), axis=-1)
     gradS      = np.cross(s_dXYZ_dVARPHI, s_dXYZ_dTHETA)/J[:, :, None]
     gradVARPHI = np.cross(s_dXYZ_dTHETA, s_dXYZ_dS)/J[:, :, None]
     gradTHETA = np.cross(s_dXYZ_dS, s_dXYZ_dVARPHI)/J[:, :, None]
+    # gradALPHA = gradTHETA - iota * gradVARPHI - s_VARPHI[:, :, None] * gradS * dds_iota
+    
     
     gradS_dot_gradTHETA = np.sum(gradS*gradTHETA, axis=-1)
     gradS_dot_gradVARPHI = np.sum(gradS*gradVARPHI, axis=-1)
@@ -359,9 +375,16 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     gradTHETA_dot_gradTHETA = np.sum(gradTHETA*gradTHETA, axis=-1)
     modB = field.set_points(s_XYZ.reshape((-1, 3))).AbsB().reshape(s_XYZ.shape[:-1])
 
-    iota = InterpolatedUnivariateSpline(tf, iotas, ext=2, k=k)(s)
-    varphi = np.linspace(0, length, npoints)
-    theta = alpha+iota*varphi
+    gradpar = -iota * J/modB # \vec{b} \cdot \nabla \theta. equality follows from \vec{B} = \nabla \psi x \nabla \alpha. 
+    # gradALPHA_dot_gradALPHA = np.sum(gradALPHA*gradALPHA, axis=-1)
+    # gradS_dot_gradALPHA = np.sum(gradS*gradALPHA, axis=-1)
+
+    # calculate drifts
+    B = field.set_points(s_XYZ.reshape((-1, 3))).B().reshape(s_XYZ.shape)
+    gradB = field.set_points(s_XYZ.reshape((-1, 3))).GradAbsB().reshape(s_XYZ.shape)
+    # gradALPHA_dot_B_cross_gradB = np.sum(gradALPHA * np.cross(B, gradB), axis=-1)
+    gradS_dot_B_cross_gradB = np.sum(gradS * np.cross(B, gradB), axis=-1)
+    
     
     gradS_dot_gradTHETA_on_fl = fourier_interpolation2(gradS_dot_gradTHETA, varphi, theta)
     gradS_dot_gradVARPHI_on_fl = fourier_interpolation2(gradS_dot_gradVARPHI, varphi, theta)
@@ -371,7 +394,28 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
     gradTHETA_dot_gradTHETA_on_fl = fourier_interpolation2(gradTHETA_dot_gradTHETA, varphi, theta)
     modB_on_fl = fourier_interpolation2(modB, varphi, theta)
     J_on_fl = fourier_interpolation2(J, varphi, theta)
-    
+
+
+    gradALPHA_on_fl = np.zeros((npoints, 3))
+    gradB_on_fl = np.zeros((npoints, 3))
+    B_on_fl = np.zeros((npoints, 3))
+    for i in range(3):
+        gradB_on_fl[:,i] = fourier_interpolation2(gradB[i], varphi, theta)
+        B_on_fl[:,i] = fourier_interpolation2(B[i], varphi, theta)
+        gradVARPHI_on_fl = fourier_interpolation2(gradVARPHI[i], varphi, theta)
+        gradTHETA_on_fl = fourier_interpolation2(gradTHETA[i], varphi, theta)
+        gradS_on_fl = fourier_interpolation2(gradS[i], varphi, theta)
+        gradALPHA_on_fl[:,i] = gradTHETA_on_fl - iota * gradVARPHI_on_fl - dds_iota * varphi * gradS_on_fl
+        
+    gradALPHA_dot_B_cross_gradB_on_fl = np.sum(gradALPHA_on_fl * np.cross(B_on_fl, gradB_on_fl), axis=-1)
+
+    gradpar_on_fl = fourier_interpolation2(gradpar, varphi, theta)
+    gradALPHA_dot_gradALPHA_on_fl = gradTHETA_dot_gradTHETA_on_fl + iota**2 * gradVARPHI_dot_gradVARPHI_on_fl \
+        + varphi**2 * dds_iota**2 * gradS_dot_gradS_on_fl \
+        - 2 * (iota * gradTHETA_dot_gradVARPHI_on_fl + varphi * dds_iota * gradS_dot_gradTHETA_on_fl + varphi * dds_iota * iota * gradS_dot_gradVARPHI_on_fl)
+    gradS_dot_gradALPHA_on_fl = gradS_dot_gradTHETA_on_fl - iota * gradS_dot_gradVARPHI_on_fl - varphi * dds_iota * gradS_dot_gradS_on_fl
+
+    gradS_dot_B_cross_gradB_on_fl =  fourier_interpolation2(gradS_dot_B_cross_gradB, varphi, theta) 
     out_dict = {'varphi_on_fl':varphi, 'theta_on_fl':theta,\
                 'gradS_dot_gradTHETA_on_fl':gradS_dot_gradTHETA_on_fl, \
                 'gradS_dot_gradVARPHI_on_fl':gradS_dot_gradVARPHI_on_fl, \
@@ -390,7 +434,13 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
                 'gradS_dot_gradS_on_s':gradS_dot_gradS,\
                 'gradVARPHI_dot_gradVARPHI_on_s':gradVARPHI_dot_gradVARPHI,\
                 'gradTHETA_dot_gradTHETA_s':gradTHETA_dot_gradTHETA,\
-                'modB_on_s':modB, 'J_on_s':J}
+                'modB_on_s':modB, 'J_on_s':J,\
+                'gradpar_on_fl': gradpar_on_fl,\
+                'gradALPHA_dot_gradALPHA_on_fl' : gradALPHA_dot_gradALPHA_on_fl,\
+                'gradS_dot_gradALPHA_on_fl' : gradS_dot_gradALPHA_on_fl,\
+                'gradS_dot_B_cross_gradB_on_fl' : gradS_dot_B_cross_gradB_on_fl,\
+                'gradALPHA_dot_B_cross_gradB_on_fl' : gradALPHA_dot_B_cross_gradB_on_fl,
+                }
 
     if filename is not None:
         pointdata = {'S':S, 'VARPHI':VARPHI, 'THETA': THETA, 'gradS': tuple([dXYZ_dS[..., i].copy() for i in range(3)]), 'gradVARPHI': tuple([dXYZ_dVARPHI[..., i].copy() for i in range(3)]), 'gradTHETA': tuple([dXYZ_dTHETA[..., i].copy() for i in range(3)])}
@@ -402,7 +452,8 @@ def output_to_gx(axis, surfaces, iotas, tf, field, s=0.1, alpha=0, npoints=1024,
         plt.figure(figsize=(12, 8))
         nrows = 4
         ncols = 2
-        for j, variable in enumerate(variables):
+        plot_variables = ['modB_on_fl', 'gradpar_on_fl', 'gradALPHA_dot_B_cross_gradB_on_fl', 'gradALPHA_dot_B_cross_gradB_on_fl', 'gradS_dot_B_cross_gradB_on_fl', 'gradALPHA_dot_gradALPHA_on_fl', 'gradS_dot_gradALPHA_on_fl', 'gradS_dot_gradS_on_fl']
+        for j, variable in enumerate(plot_variables):
             plt.subplot(nrows, ncols, j + 1)
             plt.plot(out_dict['varphi_on_fl'], out_dict[variable])
             plt.xlabel(r'Boozer toroidal angle $\varphi$')
